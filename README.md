@@ -4,6 +4,14 @@ Kandroid is an independent, open-source Android client for [Kanboard](https://ka
 
 Kandroid is not an official Kanboard application and is not affiliated with or endorsed by the Kanboard project.
 
+## Screenshots
+
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01-Overview.png" alt="Kandroid board overview" width="30%" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02-EditTask.png" alt="Kandroid task editor" width="30%" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03-Widget.png" alt="Kandroid home-screen widget" width="30%" />
+</p>
+
 ## Features
 
 - Connect to a Kanboard server with a username and personal API token.
