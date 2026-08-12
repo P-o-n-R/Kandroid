@@ -54,6 +54,7 @@ import androidx.work.workDataOf
 import com.kandroid.app.KandroidApplication
 import com.kandroid.app.MainActivity
 import com.kandroid.app.data.ColumnEntity
+import com.kandroid.app.data.AppMode
 import com.kandroid.app.data.TaskEntity
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -233,6 +234,12 @@ class RefreshWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: androidx.glance.action.ActionParameters) {
         val preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId)
         val projectId = preferences[WidgetPreferences.projectId] ?: return
+        val app = context.applicationContext as KandroidApplication
+        if (app.credentialStore.mode() == AppMode.LOCAL) {
+            WidgetUpdater.refreshSnapshot(context, glanceId, status = WidgetPreferences.IDLE, successAt = System.currentTimeMillis())
+            KandroidWidget().update(context, glanceId)
+            return
+        }
         WidgetUpdater.refreshSnapshot(context, glanceId, status = WidgetPreferences.SYNCING)
         KandroidWidget().update(context, glanceId)
         val request = OneTimeWorkRequestBuilder<WidgetRefreshWorker>()
@@ -283,6 +290,15 @@ internal object WidgetUpdater {
         }
     }
 
+    suspend fun resetAll(context: Context) {
+        GlanceAppWidgetManager(context).getGlanceIds(KandroidWidget::class.java).forEach { glanceId ->
+            updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) {
+                it.toMutablePreferences().apply { remove(WidgetPreferences.projectId); remove(WidgetPreferences.snapshot) }
+            }
+            KandroidWidget().update(context, glanceId)
+        }
+    }
+
     suspend fun setProjectStatus(context: Context, projectId: Long, status: String, successAt: Long? = null) {
         GlanceAppWidgetManager(context).getGlanceIds(KandroidWidget::class.java).forEach { glanceId ->
             val preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId)
@@ -316,8 +332,9 @@ internal object WidgetUpdater {
         lastSuccess: Long?
     ): WidgetSnapshot {
         val app = context.applicationContext as KandroidApplication
-        val signedIn = app.credentialStore.load() != null
-        if (!signedIn) return WidgetSnapshot(
+        val mode = app.credentialStore.mode()
+        val configuredMode = mode != AppMode.UNCONFIGURED
+        if (!configuredMode) return WidgetSnapshot(
             signedIn = false,
             configured = projectId != null,
             projectId = projectId,
@@ -325,14 +342,14 @@ internal object WidgetUpdater {
             lastSuccess = lastSuccess
         )
         if (projectId == null) return WidgetSnapshot(
-            signedIn = true,
+            signedIn = configuredMode,
             configured = false,
             refreshStatus = status,
             lastSuccess = lastSuccess
         )
         val project = app.database.dao().project(projectId)?.takeIf { it.isActive }
             ?: return WidgetSnapshot(
-                signedIn = true,
+                signedIn = configuredMode,
                 configured = true,
                 projectId = projectId,
                 refreshStatus = status,
@@ -341,7 +358,7 @@ internal object WidgetUpdater {
         val columns = app.database.dao().widgetColumns(projectId)
         val tasks = app.database.dao().widgetTasks(projectId)
         return WidgetSnapshot(
-            signedIn = true,
+            signedIn = configuredMode,
             configured = true,
             projectName = project.name,
             projectId = projectId,

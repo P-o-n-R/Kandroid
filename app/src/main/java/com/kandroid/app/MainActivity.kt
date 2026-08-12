@@ -27,7 +27,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openRequestedProject(intent: Intent?) {
-        intent?.getLongExtra(EXTRA_PROJECT_ID, -1L)?.takeIf { it > 0 }?.let(model::openProject)
+        intent?.takeIf { it.hasExtra(EXTRA_PROJECT_ID) }?.getLongExtra(EXTRA_PROJECT_ID, Long.MIN_VALUE)
+            ?.takeIf { it != Long.MIN_VALUE }?.let(model::openProject)
     }
 
     companion object {

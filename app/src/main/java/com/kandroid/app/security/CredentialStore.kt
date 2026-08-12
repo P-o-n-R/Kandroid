@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.kandroid.app.data.Credentials
+import com.kandroid.app.data.AppMode
 import java.security.KeyStore
 import java.util.Base64
 import javax.crypto.Cipher
@@ -44,5 +45,12 @@ class CredentialStore(context: Context) {
     }.getOrNull()
 
     fun clear() { prefs.edit().clear().apply() }
-}
 
+    fun mode(): AppMode = prefs.getString("mode", null)?.let {
+        runCatching { AppMode.valueOf(it) }.getOrNull()
+    } ?: if (load() != null) AppMode.KANBOARD else AppMode.UNCONFIGURED
+
+    fun setMode(mode: AppMode) { prefs.edit().putString("mode", mode.name).apply() }
+
+    fun clearCredentials() { prefs.edit().remove("value").apply() }
+}

@@ -40,6 +40,7 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import com.kandroid.app.KandroidApplication
 import com.kandroid.app.MainActivity
 import com.kandroid.app.data.ProjectEntity
+import com.kandroid.app.data.AppMode
 import com.kandroid.app.ui.KandroidTheme
 import kotlinx.coroutines.launch
 
@@ -93,13 +94,13 @@ class WidgetConfigurationActivity : ComponentActivity() {
                         null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
-                        else -> if ((application.credentialStore.load() == null) || available.isEmpty()) {
+                        else -> if ((application.credentialStore.mode() == AppMode.UNCONFIGURED) || available.isEmpty()) {
                             Column(
                                 Modifier.fillMaxSize().padding(padding).padding(24.dp),
                                 verticalArrangement = Arrangement.Center,
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(if (application.credentialStore.load() == null) "Sign in to Kandroid before adding this widget." else "Open Kandroid to load your projects.")
+                                Text(if (application.credentialStore.mode() == AppMode.UNCONFIGURED) "Set up Kandroid before adding this widget." else "Open Kandroid to create or load a project.")
                                 Button(
                                     onClick = { startActivity(Intent(this@WidgetConfigurationActivity, MainActivity::class.java)) },
                                     modifier = Modifier.padding(top = 16.dp)

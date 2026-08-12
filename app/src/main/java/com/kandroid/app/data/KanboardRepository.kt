@@ -18,6 +18,20 @@ class KanboardRepository(private val dao: KandroidDao) {
         return id
     }
 
+    suspend fun createLocalProject(name: String): Long {
+        val id = nextNegative(dao.minimumProjectId())
+        val firstColumn = nextNegative(dao.minimumColumnId())
+        dao.upsertProject(ProjectEntity(id, name.trim()))
+        dao.upsertColumns(LOCAL_COLUMNS.mapIndexed { index, title ->
+            ColumnEntity(firstColumn - index, id, title, index + 1)
+        })
+        return id
+    }
+
+    suspend fun archiveLocalProject(projectId: Long) {
+        dao.project(projectId)?.let { dao.upsertProject(it.copy(isActive = false)) }
+    }
+
     suspend fun archiveProject(api: KanboardApi, projectId: Long) {
         val old = dao.project(projectId) ?: return
         dao.upsertProject(old.copy(isActive = false))
@@ -45,6 +59,29 @@ class KanboardRepository(private val dao: KandroidDao) {
         api.createTask(projectId, columnId, draft)
         refreshBoard(api, projectId)
     }
+
+    suspend fun createLocal(projectId: Long, columnId: Long, draft: TaskDraft) {
+        val position = dao.widgetTasks(projectId).count { it.columnId == columnId } + 1
+        dao.upsertTask(TaskEntity(nextNegative(dao.minimumTaskId()), projectId, columnId,
+            draft.title, draft.description, draft.dueDate, position, true))
+    }
+
+    suspend fun updateLocal(id: Long, draft: TaskDraft) {
+        dao.task(id)?.let { dao.upsertTask(it.copy(title = draft.title, description = draft.description,
+            dueDate = draft.dueDate, updatedAt = System.currentTimeMillis())) }
+    }
+
+    suspend fun moveLocal(id: Long, columnId: Long, position: Int) {
+        dao.task(id)?.let { dao.upsertTask(it.copy(columnId = columnId, position = position,
+            updatedAt = System.currentTimeMillis())) }
+    }
+
+    suspend fun closeLocal(id: Long) = setLocalStatus(id, false)
+    suspend fun reopenLocal(id: Long) = setLocalStatus(id, true)
+    private suspend fun setLocalStatus(id: Long, active: Boolean) {
+        dao.task(id)?.let { dao.upsertTask(it.copy(isActive = active, updatedAt = System.currentTimeMillis())) }
+    }
+    suspend fun deleteLocal(id: Long) = dao.deleteTask(id)
 
     suspend fun update(api: KanboardApi, id: Long, draft: TaskDraft) {
         val old = dao.task(id) ?: return
@@ -87,4 +124,8 @@ class KanboardRepository(private val dao: KandroidDao) {
         try { check(api.deleteTask(id)) { "Task deletion was rejected." } }
         catch (error: Throwable) { dao.upsertTask(old); throw error }
     }
+
+    private fun nextNegative(minimum: Long?): Long = minimum?.takeIf { it <= -1 }?.minus(1) ?: -1
+
+    companion object { val LOCAL_COLUMNS = listOf("Backlog", "Ready", "Work in progress", "Done") }
 }

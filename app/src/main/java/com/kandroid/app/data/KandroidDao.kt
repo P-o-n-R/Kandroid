@@ -23,6 +23,13 @@ interface KandroidDao {
     @Query("SELECT * FROM tasks WHERE projectId = :projectId AND isActive = 1 ORDER BY columnId, position, id")
     suspend fun widgetTasks(projectId: Long): List<TaskEntity>
 
+    @Query("SELECT * FROM projects ORDER BY id") suspend fun allProjects(): List<ProjectEntity>
+    @Query("SELECT * FROM columns ORDER BY projectId, position, id") suspend fun allColumns(): List<ColumnEntity>
+    @Query("SELECT * FROM tasks ORDER BY projectId, isActive DESC, columnId, position, id") suspend fun allTasks(): List<TaskEntity>
+    @Query("SELECT MIN(id) FROM projects") suspend fun minimumProjectId(): Long?
+    @Query("SELECT MIN(id) FROM columns") suspend fun minimumColumnId(): Long?
+    @Query("SELECT MIN(id) FROM tasks") suspend fun minimumTaskId(): Long?
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun task(id: Long): TaskEntity?
 
@@ -43,6 +50,18 @@ interface KandroidDao {
 
     @Query("DELETE FROM tasks WHERE id = :id")
     suspend fun deleteTask(id: Long)
+
+    @Query("DELETE FROM tasks") suspend fun deleteAllTasks()
+    @Query("DELETE FROM columns") suspend fun deleteAllColumns()
+    @Query("DELETE FROM projects") suspend fun deleteAllProjects()
+
+    @Transaction
+    suspend fun clearAll() { deleteAllTasks(); deleteAllColumns(); deleteAllProjects() }
+
+    @Transaction
+    suspend fun replaceWorkspace(projects: List<ProjectEntity>, columns: List<ColumnEntity>, tasks: List<TaskEntity>) {
+        clearAll(); upsertProjects(projects); upsertColumns(columns); upsertTasks(tasks)
+    }
 
     @Transaction
     suspend fun replaceColumns(projectId: Long, items: List<ColumnEntity>) {

@@ -15,6 +15,8 @@ import kotlinx.serialization.json.longOrNull
 import java.time.Instant
 import java.time.ZoneOffset
 
+enum class AppMode { UNCONFIGURED, KANBOARD, LOCAL }
+
 @Entity(tableName = "projects")
 data class ProjectEntity(@PrimaryKey val id: Long, val name: String, val isActive: Boolean = true)
 
@@ -36,6 +38,27 @@ data class TaskEntity(
 
 data class Credentials(val serverUrl: String, val username: String, val token: String)
 data class TaskDraft(val title: String, val description: String = "", val dueDate: String? = null)
+
+@Serializable
+data class BackupEnvelope(
+    val format: String = FORMAT,
+    val schemaVersion: Int = VERSION,
+    val exportedAt: String,
+    val sourceMode: String,
+    val projects: List<BackupProject> = emptyList(),
+    val columns: List<BackupColumn> = emptyList(),
+    val tasks: List<BackupTask> = emptyList()
+) {
+    companion object { const val FORMAT = "kandroid-backup"; const val VERSION = 1 }
+}
+
+@Serializable data class BackupProject(val id: Long, val name: String, val isActive: Boolean = true)
+@Serializable data class BackupColumn(val id: Long, val projectId: Long, val title: String, val position: Int)
+@Serializable data class BackupTask(
+    val id: Long, val projectId: Long, val columnId: Long, val title: String,
+    val description: String = "", val dueDate: String? = null, val position: Int,
+    val isActive: Boolean, val updatedAt: Long
+)
 
 @Serializable
 data class ProjectDto(
