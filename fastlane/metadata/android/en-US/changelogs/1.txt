@@ -1,0 +1,6 @@
+Initial release.
+
+* Connect to self-hosted Kanboard over HTTPS or work entirely on-device
+* Manage projects and tasks with offline caching
+* Add configurable home-screen widgets
+* Export and restore portable local backups

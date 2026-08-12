@@ -1,0 +1,1 @@
+Kanban boards for self-hosted Kanboard or entirely on your device

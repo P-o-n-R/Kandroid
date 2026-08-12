@@ -55,6 +55,22 @@ On Linux or macOS:
 
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Releases and F-Droid
+
+Release versions are declared statically in `app/build.gradle.kts` so F-Droid can discover and build them from source. For each release:
+
+1. Increment `versionCode` and update `versionName`. Never reuse a version code.
+2. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` with release notes of at most 500 characters.
+3. From a clean checkout, run the unit tests and build the unsigned release APK:
+
+   ```sh
+   ./gradlew clean testDebugUnitTest assembleRelease
+   ```
+
+4. Commit the release, then create and push an annotated tag named `v<versionName>` on that exact commit (for example, `v1.0`).
+
+F-Droid builds and signs its APK from the tagged source. Signing keys, passwords, and generated APKs or app bundles must not be committed. The store listing maintained in this repository is under `fastlane/metadata/android/en-US/`.
+
 ## Using Kandroid
 
 On first launch, Kandroid promotes connecting to Kanboard but also offers **Use locally instead**. To connect, enter the HTTPS address of your server, your username, and a personal API token, then successfully test the connection. Local-only setup creates a starter board named **My project**.

@@ -1,0 +1,15 @@
+Kandroid is an independent, free and open-source Kanban app for Android. Connect it directly to your own Kanboard server, or use it entirely on-device without an account or network connection.
+
+Features include:
+
+* Browse projects and swipe between board columns
+* Create, edit, move, reorder, close, reopen, and delete tasks
+* Set task descriptions and due dates
+* Read cached Kanboard projects and tasks while offline
+* Create local-only projects that never contact a server
+* Add configurable home-screen widgets
+* Export local backups or Kanboard snapshots and restore them locally
+
+Kandroid has no advertising, analytics, or tracking SDKs. In connected mode it communicates only with the HTTPS Kanboard server you select. Your API token is encrypted using Android Keystore, and Android backup is disabled. Local-only mode does not require internet access.
+
+Kandroid is not an official Kanboard application and is not affiliated with or endorsed by the Kanboard project.

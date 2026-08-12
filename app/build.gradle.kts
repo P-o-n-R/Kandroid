@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.kandroid.app"
     compileSdk = 37
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.kandroid.app"
@@ -16,6 +17,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.generatedDensities()
     }
 
     buildFeatures { compose = true }
