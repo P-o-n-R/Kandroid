@@ -67,4 +67,6 @@ Run emulator or live-server checks only when explicitly authorized. Never infer 
 - Current SDK levels: compile/target 37, minimum 26.
 - Store screenshots belong in `fastlane/metadata/android/en-US/images/phoneScreenshots/`.
 - Do not commit release signing keys, keystore passwords, or local signing configuration. `.gitignore` already excludes standard signing files.
-- There are currently no GitHub Actions workflows. Any future release workflow must keep signing material in GitHub Actions Secrets and never print it.
+- GitHub Actions runs unit tests, Android lint, and an unsigned release build for pull requests and `main`.
+- Annotated `v*` tags target the `release` environment to build and publish a signed GitHub APK. F-Droid builds remain unsigned by this repository and are signed independently.
+- Release signing material must remain in GitHub environment secrets and must never be printed. See `docs/RELEASING.md` for the release contract.

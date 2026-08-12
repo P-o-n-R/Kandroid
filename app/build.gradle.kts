@@ -5,6 +5,24 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val releaseSigningValues = mapOf(
+    "ANDROID_SIGNING_KEY_PATH" to providers.environmentVariable("ANDROID_SIGNING_KEY_PATH").orNull,
+    "ANDROID_KEYSTORE_PASSWORD" to providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull,
+    "ANDROID_KEY_ALIAS" to providers.environmentVariable("ANDROID_KEY_ALIAS").orNull,
+    "ANDROID_KEY_PASSWORD" to providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull,
+)
+val hasReleaseSigningValue = releaseSigningValues.values.any { !it.isNullOrBlank() }
+val hasCompleteReleaseSigning = releaseSigningValues.values.all { !it.isNullOrBlank() }
+
+if (hasReleaseSigningValue && !hasCompleteReleaseSigning) {
+    val missingVariables = releaseSigningValues
+        .filterValues { it.isNullOrBlank() }
+        .keys
+        .sorted()
+        .joinToString()
+    throw GradleException("Incomplete release signing configuration. Missing: $missingVariables")
+}
+
 android {
     namespace = "com.kandroid.app"
     compileSdk = 37
@@ -21,6 +39,25 @@ android {
     }
 
     buildFeatures { compose = true }
+
+    signingConfigs {
+        if (hasCompleteReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseSigningValues.getValue("ANDROID_SIGNING_KEY_PATH")!!)
+                storePassword = releaseSigningValues.getValue("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningValues.getValue("ANDROID_KEY_ALIAS")
+                keyPassword = releaseSigningValues.getValue("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (hasCompleteReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -67,3 +104,48 @@ dependencies {
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
+tasks.register("validateReleaseMetadata") {
+    group = "verification"
+    description = "Validates a release tag against the app version and F-Droid changelog."
+
+    val configuredVersionCode = android.defaultConfig.versionCode
+        ?: throw GradleException("versionCode must be configured")
+    val configuredVersionName = android.defaultConfig.versionName
+        ?: throw GradleException("versionName must be configured")
+    val releaseTag = providers.gradleProperty("releaseTag")
+    val changelogFile = rootProject.file(
+        "fastlane/metadata/android/en-US/changelogs/$configuredVersionCode.txt",
+    )
+
+    inputs.property("releaseTag", releaseTag)
+    inputs.file(changelogFile)
+
+    doLast {
+        val tag = releaseTag.orNull
+            ?: throw GradleException("Pass the release tag with -PreleaseTag=v$configuredVersionName")
+        val expectedTag = "v$configuredVersionName"
+        if (tag != expectedTag) {
+            throw GradleException("Release tag '$tag' must exactly match '$expectedTag'")
+        }
+        if (configuredVersionCode <= 0) {
+            throw GradleException("versionCode must be a positive integer")
+        }
+
+        val notes = changelogFile.readText(Charsets.UTF_8).trim()
+        if (notes.isEmpty()) {
+            throw GradleException("Release changelog must not be empty: ${changelogFile.path}")
+        }
+        val characterCount = notes.codePointCount(0, notes.length)
+        if (characterCount > 500) {
+            throw GradleException(
+                "Release changelog must be at most 500 characters; found $characterCount: ${changelogFile.path}",
+            )
+        }
+
+        logger.lifecycle(
+            "Validated release $tag " +
+                "(versionCode $configuredVersionCode, changelog $characterCount characters)",
+        )
+    }
+}

@@ -55,21 +55,27 @@ On Linux or macOS:
 
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
-## Releases and F-Droid
+## Releases, GitHub, and F-Droid
 
-Release versions are declared statically in `app/build.gradle.kts` so F-Droid can discover and build them from source. For each release:
+Release versions are declared statically in `app/build.gradle.kts` so F-Droid can discover and build them from source. Pull requests and updates to `main` are checked by GitHub Actions with unit tests, Android lint, and an unsigned release build.
+
+For each release:
 
 1. Increment `versionCode` and update `versionName`. Never reuse a version code.
 2. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` with release notes of at most 500 characters.
-3. From a clean checkout, run the unit tests and build the unsigned release APK:
+3. From a clean checkout, validate the metadata, run the unit tests and lint, and build the unsigned release APK:
 
    ```sh
-   ./gradlew clean testDebugUnitTest assembleRelease
+   ./gradlew :app:validateReleaseMetadata testDebugUnitTest lintDebug assembleRelease \
+     -PreleaseTag=v1.0 \
+     --no-daemon
    ```
 
 4. Commit the release, then create and push an annotated tag named `v<versionName>` on that exact commit (for example, `v1.0`).
 
-F-Droid builds and signs its APK from the tagged source. Signing keys, passwords, and generated APKs or app bundles must not be committed. The store listing maintained in this repository is under `fastlane/metadata/android/en-US/`.
+F-Droid builds and signs its APK from the tagged source. A valid tag also triggers an automated GitHub Release containing a separately signed APK and SHA-256 checksum. Signing keys, passwords, and generated APKs or app bundles must not be committed. The store listing maintained in this repository is under `fastlane/metadata/android/en-US/`.
+
+Maintainer setup, signing-key backup requirements, repository protections, and the complete release checklist are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Using Kandroid
 

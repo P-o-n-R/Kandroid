@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate annotated tag and main ancestry
+        shell: bash
+        run: |
+          if [[ "$(git cat-file -t "$GITHUB_REF_NAME")" != "tag" ]]; then
+            echo "::error::Release tags must be annotated tags."
+            exit 1
+          fi
+
+          tagged_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          if ! git merge-base --is-ancestor "$tagged_commit" origin/main; then
+            echo "::error::Release tag must point to a commit contained in main."
+            exit 1
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --channel=3 --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --channel=3 "platforms;android-37.0" "build-tools;36.0.0"
+
+      - name: Decode release keystore
+        shell: bash
+        env:
+          ANDROID_SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for variable in \
+            ANDROID_SIGNING_KEY_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD
+          do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Required release secret is not configured: $variable"
+              exit 1
+            fi
+          done
+
+          key_path="$RUNNER_TEMP/kandroid-release.jks"
+          printf '%s' "$ANDROID_SIGNING_KEY_BASE64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo "ANDROID_SIGNING_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Validate, test, lint, and build signed APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >-
+          ./gradlew
+          :app:validateReleaseMetadata
+          testDebugUnitTest
+          lintDebug
+          assembleRelease
+          -PreleaseTag=${{ github.ref_name }}
+          --no-daemon
+          --stacktrace
+
+      - name: Verify and package release
+        id: package
+        shell: bash
+        run: |
+          apk="app/build/outputs/apk/release/app-release.apk"
+          if [[ ! -f "$apk" ]]; then
+            echo "::error::Signed release APK was not produced."
+            exit 1
+          fi
+
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          release_apk="dist/Kandroid-v${version}.apk"
+          cp "$apk" "$release_apk"
+          (
+            cd dist
+            sha256sum "Kandroid-v${version}.apk" > "Kandroid-v${version}.apk.sha256"
+          )
+          echo "apk=$release_apk" >> "$GITHUB_OUTPUT"
+          echo "checksum=${release_apk}.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Kandroid-${{ github.ref_name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_APK: ${{ steps.package.outputs.apk }}
+          RELEASE_CHECKSUM: ${{ steps.package.outputs.checksum }}
+        shell: bash
+        run: |
+          version_code="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' app/build.gradle.kts)"
+          notes="fastlane/metadata/android/en-US/changelogs/${version_code}.txt"
+          gh release create "$GITHUB_REF_NAME" \
+            "$RELEASE_APK" \
+            "$RELEASE_CHECKSUM" \
+            --verify-tag \
+            --title "Kandroid ${GITHUB_REF_NAME#v}" \
+            --notes-file "$notes"
+
+      - name: Remove temporary keystore
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [[ -n "${ANDROID_SIGNING_KEY_PATH:-}" ]]; then
+            rm -f -- "$ANDROID_SIGNING_KEY_PATH"
+          fi
