@@ -1,0 +1,90 @@
+package com.kandroid.app.data
+
+import com.kandroid.app.network.KanboardApi
+import kotlinx.coroutines.flow.Flow
+
+class KanboardRepository(private val dao: KandroidDao) {
+    fun projects(): Flow<List<ProjectEntity>> = dao.observeProjects()
+    fun columns(projectId: Long): Flow<List<ColumnEntity>> = dao.observeColumns(projectId)
+    fun tasks(projectId: Long, active: Boolean): Flow<List<TaskEntity>> = dao.observeTasks(projectId, active)
+
+    suspend fun refreshProjects(api: KanboardApi) {
+        dao.upsertProjects(api.projects().map { it.entity() })
+    }
+
+    suspend fun createProject(api: KanboardApi, name: String): Long {
+        val id = api.createProject(name)
+        refreshProjects(api)
+        return id
+    }
+
+    suspend fun archiveProject(api: KanboardApi, projectId: Long) {
+        val old = dao.project(projectId) ?: return
+        dao.upsertProject(old.copy(isActive = false))
+        try {
+            check(api.archiveProject(projectId)) { "Project archiving was rejected." }
+        } catch (error: Throwable) {
+            dao.upsertProject(old)
+            throw error
+        }
+        refreshProjects(api)
+    }
+
+    suspend fun refreshBoard(api: KanboardApi, projectId: Long) {
+        val columns = api.columns(projectId).map { it.entity(projectId) }
+        val active = api.tasks(projectId, true).map { it.entity() }
+        dao.replaceColumns(projectId, columns)
+        dao.replaceTasks(projectId, true, active)
+    }
+
+    suspend fun refreshClosed(api: KanboardApi, projectId: Long) {
+        dao.replaceTasks(projectId, false, api.tasks(projectId, false).map { it.entity() })
+    }
+
+    suspend fun create(api: KanboardApi, projectId: Long, columnId: Long, draft: TaskDraft) {
+        api.createTask(projectId, columnId, draft)
+        refreshBoard(api, projectId)
+    }
+
+    suspend fun update(api: KanboardApi, id: Long, draft: TaskDraft) {
+        val old = dao.task(id) ?: return
+        dao.upsertTask(old.copy(title = draft.title, description = draft.description, dueDate = draft.dueDate))
+        try {
+            check(api.updateTask(id, draft)) { "Task update was rejected." }
+        } catch (error: Throwable) {
+            dao.upsertTask(old); throw error
+        }
+        refreshBoard(api, old.projectId)
+    }
+
+    suspend fun move(api: KanboardApi, id: Long, columnId: Long, position: Int) {
+        val old = dao.task(id) ?: return
+        dao.upsertTask(old.copy(columnId = columnId, position = position))
+        try {
+            check(api.moveTask(old.projectId, id, columnId, position)) { "Task move was rejected." }
+        } catch (error: Throwable) {
+            dao.upsertTask(old); throw error
+        }
+        refreshBoard(api, old.projectId)
+    }
+
+    suspend fun close(api: KanboardApi, id: Long) = changeStatus(api, id, false)
+    suspend fun reopen(api: KanboardApi, id: Long) = changeStatus(api, id, true)
+
+    private suspend fun changeStatus(api: KanboardApi, id: Long, active: Boolean) {
+        val old = dao.task(id) ?: return
+        dao.upsertTask(old.copy(isActive = active))
+        try {
+            val ok = if (active) api.reopenTask(id) else api.closeTask(id)
+            check(ok) { "Task status change was rejected." }
+        } catch (error: Throwable) { dao.upsertTask(old); throw error }
+        refreshBoard(api, old.projectId); refreshClosed(api, old.projectId)
+    }
+
+    suspend fun delete(api: KanboardApi, id: Long) {
+        val old = dao.task(id) ?: return
+        dao.deleteTask(id)
+        try { check(api.deleteTask(id)) { "Task deletion was rejected." } }
+        catch (error: Throwable) { dao.upsertTask(old); throw error }
+    }
+}

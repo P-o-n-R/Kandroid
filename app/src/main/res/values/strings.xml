@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Kandroid</string>
+    <string name="widget_name">Kandroid tasks</string>
+    <string name="widget_description">Active tasks from a selected Kanboard project</string>
+</resources>
