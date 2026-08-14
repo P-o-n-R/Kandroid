@@ -1,0 +1,1 @@
+Remove embedded dependency metadata from release packages.
